@@ -12,10 +12,10 @@ mkdir output
 echo Building kernel patch files...
 
 call :buildPatchSection src\KHV\17489_RGLoader khv_vfuses_sb
-call :buildPatchSection src\KHV\17489_RGLoader khv_vfuses_jasperbb
+call :buildPatchSection src\KHV\17489_RGLoader khv_vfuses_flash
 
 call :buildPatchSection src\KHV\17489_XDKBuild khv_vfuses_sb
-call :buildPatchSection src\KHV\17489_XDKBuild khv_vfuses_jasperbb
+call :buildPatchSection src\KHV\17489_XDKBuild khv_vfuses_flash
 
 echo Done!
 
@@ -50,7 +50,7 @@ copy output\17489_RGLoader_RGH1.3\patches_g2mjasper.bin output\17489_RGLoader_RG
 copy output\17489_RGLoader_RGH1.3\patches_g2mjasper.bin output\17489_RGLoader_RGH1.3\patches_g2mfalcon.bin
 
 REM *** BB consoles - Jasper only
-copy /b src\2BL\2620\sb_vfuses_rgh13_01w.bin + src\4BL\17489\sd_vfuses_bb.bin + src\KHV\17489_RGLoader\khv_vfuses_jasperbb.bin output\17489_RGLoader_RGH1.3\patches_g2mjasper_flash.bin
+copy /b src\2BL\2620\sb_vfuses_rgh13_01w.bin + src\4BL\17489\sd_vfuses_bb.bin + src\KHV\17489_RGLoader\khv_vfuses_flash.bin output\17489_RGLoader_RGH1.3\patches_g2mjasper_flash.bin
 
 echo Done!
 
@@ -66,7 +66,7 @@ copy output\17489_XDKBuild_RGH1.3\patches_g2mjasper.bin output\17489_XDKBuild_RG
 copy output\17489_XDKBuild_RGH1.3\patches_g2mjasper.bin output\17489_XDKBuild_RGH1.3\patches_g2mfalcon.bin
 
 REM *** BB consoles - Jasper only
-copy /b src\2BL\2620\sb_vfuses_rgh13_01w.bin + src\4BL\17489\sd_vfuses_bb.bin + src\KHV\17489_XDKBuild\khv_vfuses_jasperbb.bin output\17489_XDKBuild_RGH1.3\patches_g2mjasper_flash.bin
+copy /b src\2BL\2620\sb_vfuses_rgh13_01w.bin + src\4BL\17489\sd_vfuses_bb.bin + src\KHV\17489_XDKBuild\khv_vfuses_flash.bin output\17489_XDKBuild_RGH1.3\patches_g2mjasper_flash.bin
 
 echo Done!
 
