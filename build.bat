@@ -9,7 +9,10 @@ if exist output rmdir /S /Q output
 
 mkdir output
 
-echo Building kernel patch files...
+REM *** We'll check this flag after each section so we don't try to continue if the kernel/4BL/2BL etc patches are broken
+set buildFailed=0
+
+echo Building devkit kernel patch files...
 
 call:buildPatchSection src\KHV\17489_RGLoader khv_vfuses_sb
 call:buildPatchSection src\KHV\17489_RGLoader khv_vfuses_flash
@@ -19,6 +22,9 @@ call:buildPatchSection src\KHV\17489_XDKBuild khv_vfuses_sb
 call:buildPatchSection src\KHV\17489_XDKBuild khv_vfuses_flash
 call:buildPatchSection src\KHV\17489_XDKBuild khv_vfuses_jtag
 
+call:buildPatchSection src\KHV\15574_XDKBuild khv_vfuses_flash
+call:buildPatchSection src\KHV\15574_XDKBuild khv_vfuses_sb
+
 call:buildPatchSection src\KHV\15513_XDKBuild khv_vfuses_flash
 call:buildPatchSection src\KHV\15513_XDKBuild khv_vfuses_sb
 
@@ -26,23 +32,49 @@ call:buildPatchSection src\KHV\17700_XDKBuild khv_vfuses_flash
 call:buildPatchSection src\KHV\17700_XDKBuild khv_vfuses_sb
 call:buildPatchSection src\KHV\17700_XDKBuild khv_vfuses_jtag
  
-call:buildPatchSection src\KHV\17559 khv_17559_vfuses
-call:buildPatchSection src\KHV\17559 hddssauth
+echo Building retail kernel patch files...
+
+call:buildPatchSection src\KHV\17559 khv_17559_glitch2m
+call:buildPatchSection src\KHV\17559 khv_17559_glitch2
+call:buildPatchSection src\KHV\17559 khv_17559_glitch
+call:buildPatchSection src\KHV\17559 khv_17559_jtag
+call:buildPatchSection src\KHV\17559 e76reboot
 
 call:buildPatchSection src\KHV\1888 khv_1888_vfuses
-call:buildPatchSection src\KHV\1888 khv_1888_vfuses_rhea
-call:buildPatchSection src\KHV\1888 khv_1888_vfuses_zeus
 call:buildPatchSection src\KHV\1888 khv_1888_vfuses_rhea_jtag
 
 call:buildPatchSection src\KHV\1838 khv_1838_vfuses
 call:buildPatchSection src\KHV\1838 khv_1838_vfuses_devkit
-call:buildPatchSection src\KHV\1838 khv_1838_vfuses_rhea
+call:buildPatchSection src\KHV\1838 khv_1838_vfuses_jtag
 
 call:buildPatchSection src\KHV\1839 khv_1839_vfuses
 call:buildPatchSection src\KHV\1839 khv_1839_vfuses_devkit
 
 call:buildPatchSection src\KHV\6717 khv_6717_vfuses
 call:buildPatchSection src\KHV\6717 khv_6717_jtag
+
+call:buildPatchSection src\KHV\6770 khv_6770_vfuses
+call:buildPatchSection src\KHV\6770 khv_6770_jtag
+
+call:buildPatchSection src\KHV\7258 khv_7258_vfuses
+call:buildPatchSection src\KHV\7258 khv_7258_jtag
+
+call:buildPatchSection src\KHV\9199 khv_9199_vfuses
+call:buildPatchSection src\KHV\9199 khv_9199_jtag
+
+call:buildPatchSection src\KHV\13604 khv_13604_vfuses
+call:buildPatchSection src\KHV\13604 khv_13604_jtag
+call:buildPatchSection src\KHV\13604 nointmu
+
+call:buildPatchSection src\KHV\15574 khv_15574_vfuses
+call:buildPatchSection src\KHV\15574 khv_15574_jtag
+call:buildPatchSection src\KHV\15574 nointmu
+
+if %buildFailed% neq 0 (
+    echo.
+    echo ERROR: One or more KHV patches failed to build.
+    exit /b 1
+)
 
 echo Done!
 
@@ -56,13 +88,25 @@ call:buildPatchSection src\4BL\12611 sd_vfuses_sb
 call:buildPatchSection src\4BL\12611 sd_shadowboot
 
 call:buildPatchSection src\4BL\9452 cd_9452_vfuses
+call:buildPatchSection src\4BL\9452 cd_9452_glitch2
 call:buildPatchSection src\4BL\9452 cd_9452_glitch2_rgl
 
+call:buildPatchSection src\4BL\8453 cd_8453_jtag_xenon
+call:buildPatchSection src\4BL\8453 cd_8453_jtag_zephyr
 call:buildPatchSection src\4BL\8453 cd_8453_jtag_falcon
+call:buildPatchSection src\4BL\8453 cd_8453_jtag_jasper
 call:buildPatchSection src\4BL\8453 cd_8453_jtag_rgl
 call:buildPatchSection src\4BL\8453 cd_8453_jtag_1888
+call:buildPatchSection src\4BL\8453 cd_8453_glitch
 
 call:buildPatchSection src\4BL\12905 cd_12905_vfuses
+call:buildPatchSection src\4BL\12905 cd_12905_glitch2
+
+if %buildFailed% neq 0 (
+    echo.
+    echo ERROR: One or more 4BL patches failed to build.
+    exit /b 1
+)
 
 echo Done!
 
@@ -75,18 +119,45 @@ call:buildPatchSection src\2BL\14352 sb_shadowboot
 call:buildPatchSection src\2BL\4577 cbb_4577_vfuses
 call:buildPatchSection src\2BL\5772 cbb_5772_vfuses
 call:buildPatchSection src\2BL\6752 cbb_6752_vfuses
-
 call:buildPatchSection src\2BL\7378 cbb_7378_vfuses
-
+call:buildPatchSection src\2BL\9188 cbb_9188_vfuses
 call:buildPatchSection src\2BL\13121 cbb_13121_vfuses
+call:buildPatchSection src\2BL\13182 cbb_13182_vfuses
+call:buildPatchSection src\2BL\13182 cbb_13182_vfuses_wb4g
+call:buildPatchSection src\2BL\16128 cbb_16128_vfuses
 
+call:buildPatchSection src\2BL\5772 cbb_5772_glitch2
+call:buildPatchSection src\2BL\6752 cbb_6752_glitch2
+call:buildPatchSection src\2BL\7378 cbb_7378_glitch2
+call:buildPatchSection src\2BL\9188 cbb_9188_glitch2
+call:buildPatchSection src\2BL\13121 cbb_13121_glitch2
+call:buildPatchSection src\2BL\13182 cbb_13182_glitch2
+call:buildPatchSection src\2BL\13182 cbb_13182_glitch2_wb4g
+
+call:buildPatchSection src\2BL\1940 cbb_1940_jtag
+call:buildPatchSection src\2BL\4579 cbb_4579_jtag
 call:buildPatchSection src\2BL\5771 cbb_5771_jtag
+call:buildPatchSection src\2BL\5771 cbb_5771_jtag_rgl
+call:buildPatchSection src\2BL\6750 cbb_6750_jtag
+
+if %buildFailed% neq 0 (
+    echo.
+    echo ERROR: One or more 2BL patches failed to build.
+    exit /b 1
+)
 
 echo Done!
+
 
 echo Building 1BL patch files...
 
 call:buildPatchSection src\1BL\1411 ca_1411_freeboot
+
+if %buildFailed% neq 0 (
+    echo.
+    echo ERROR: One or more 1BL patches failed to build.
+    exit /b 1
+)
 
 echo Done!
 
@@ -94,6 +165,12 @@ echo Done!
 echo Building TEST patch files...
 
 call:buildPatchSection src\TEST test
+
+if %buildFailed% neq 0 (
+    echo.
+    echo ERROR: One or more TEST patches failed to build.
+    exit /b 1
+)
 
 echo Done!
 
@@ -103,6 +180,12 @@ echo Building XAM patch files...
 call:buildPatchSection src\XAM\17489_RGLoader rglXam
 del src\XAM\17489_RGLoader\rglXam.rglp
 move src\XAM\17489_RGLoader\rglXam.bin src\XAM\17489_RGLoader\rglXam.rglp
+
+if %buildFailed% neq 0 (
+    echo.
+    echo ERROR: One or more XAM patches failed to build.
+    exit /b 1
+)
 
 echo Done!
 
@@ -138,7 +221,10 @@ REM *** the corona 4gb patch is the same as what i'd use to build a hacky devkit
 copy output\17489_RGLoader\patches_devjasper.bin output\17489_RGLoader\patches_g2mcorona_flash.bin
 
 REM *** this is just a test for my falcon JTAG
-copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\5771\cbb_5771_jtag.bin + src\4BL\8453\cd_8453_jtag_rgl.bin + src\KHV\17489_RGLoader\khv_vfuses_jtag.bin output\17489_RGLoader\patches_falcon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\5771\cbb_5771_jtag_rgl.bin + src\4BL\8453\cd_8453_jtag_rgl.bin + src\KHV\17489_RGLoader\khv_vfuses_jtag.bin output\17489_RGLoader\patches_falcon.bin
+copy output\17489_RGLoader\patches_falcon.bin output\17489_RGLoader\patches_xenon.bin
+copy output\17489_RGLoader\patches_falcon.bin output\17489_RGLoader\patches_zephyr.bin
+copy output\17489_RGLoader\patches_falcon.bin output\17489_RGLoader\patches_jasper.bin
 
 echo Done!
 
@@ -171,6 +257,37 @@ REM *** the corona 4gb patch is the same as what i'd use to build a hacky devkit
 copy output\17489_XDKBuild\patches_devjasper.bin output\17489_XDKBuild\patches_g2mcorona_flash.bin
 
 echo Done!
+
+echo 15574 XDKBuild...
+
+mkdir output\15574_XDKBuild
+
+REM *** For 15574, the patch sets for 16mb machines are all identical as they use the same loaders and kernel. XeLL ends up at 0xE0000
+copy /b src\2BL\14352\sb_vfuses.bin + src\4BL\17489\sd_vfuses_sb.bin + src\KHV\15574_XDKBuild\khv_vfuses_sb.bin output\15574_XDKBuild\patches_g2mjasper.bin
+copy output\15574_XDKBuild\patches_g2mjasper.bin output\15574_XDKBuild\patches_g2mxenon.bin
+copy output\15574_XDKBuild\patches_g2mjasper.bin output\15574_XDKBuild\patches_g2mxenon_ELPIS.bin
+copy output\15574_XDKBuild\patches_g2mjasper.bin output\15574_XDKBuild\patches_g2mzephyr.bin
+copy output\15574_XDKBuild\patches_g2mjasper.bin output\15574_XDKBuild\patches_g2mfalcon.bin
+copy output\15574_XDKBuild\patches_g2mjasper.bin output\15574_XDKBuild\patches_g2mtrinity.bin
+copy output\15574_XDKBuild\patches_g2mjasper.bin output\15574_XDKBuild\patches_g2mcorona.bin
+copy output\15574_XDKBuild\patches_g2mjasper.bin output\15574_XDKBuild\patches_g2mwinchester.bin
+
+REM TODO: we're going to assume for now that all the BB machines are the same, but the SD patch might need to be different
+copy /b src\2BL\14352\sb_vfuses.bin + src\4BL\17489\sd_vfuses_bb.bin + src\KHV\15574_XDKBuild\khv_vfuses_flash.bin output\15574_XDKBuild\patches_g2mjasper_flash.bin
+copy output\15574_XDKBuild\patches_g2mjasper_flash.bin output\15574_XDKBuild\patches_g2mtrinity_flash.bin
+
+copy /b src\2BL\14352\sb_vfuses.bin + src\4BL\17489\sd_vfuses_sb.bin + src\KHV\15574_XDKBuild\khv_vfuses_flash.bin output\15574_XDKBuild\patches_g2mcorona_flash.bin
+copy output\15574_XDKBuild\patches_g2mcorona_flash.bin output\15574_XDKBuild\patches_g2mwinchester_flash.bin
+
+
+REM *** This is a bit hacky for a devkit image...
+REM *** The "devkit" SD patch looks for XeLL at 0xE4000 because XeBuild can't be consistent in where the start
+REM *** of the filesystem in a small block image is. SB patches are ignored pretty much.. just here to make sure
+REM *** the sections in the patch file are correct and xeBuild doesn't freak out (plz open source xebuild)
+copy /b src\2BL\14352\sb_vfuses.bin + src\4BL\17489\sd_vfuses_sb.bin + src\KHV\15574_XDKBuild\khv_vfuses_flash.bin output\15574_XDKBuild\patches_devjasper.bin
+copy output\15574_XDKBuild\patches_devjasper.bin output\15574_XDKBuild\patches_devxenon.bin
+copy output\15574_XDKBuild\patches_devjasper.bin output\15574_XDKBuild\patches_devzephyr.bin
+copy output\15574_XDKBuild\patches_devjasper.bin output\15574_XDKBuild\patches_devfalcon.bin
 
 echo 15513 XDKBuild...
 
@@ -237,32 +354,216 @@ copy output\17700_XDKBuild\patches_devjasper.bin output\17700_XDKBuild\patches_d
 REM *** this is just a test for my falcon JTAG
 copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\5771\cbb_5771_jtag.bin + src\4BL\8453\cd_8453_jtag_rgl.bin + src\KHV\17700_XDKBuild\khv_vfuses_jtag.bin output\17700_XDKBuild\patches_falcon.bin
 
+
+REM ********************************************************
+REM * 17559 FreeBoot patch set
+REM *
+REM * all of them!
+REM ********************************************************
 echo 17559 FreeBoot...
 
 mkdir output\17559
 
-copy /b src\2BL\6752\cbb_6752_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\17559\khv_17559_vfuses.bin output\17559\patches_g2mjasper.bin
-copy /b src\2BL\5772\cbb_5772_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\17559\khv_17559_vfuses.bin output\17559\patches_g2mfalcon.bin
-copy /b src\2BL\7378\cbb_7378_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\17559\khv_17559_vfuses.bin output\17559\patches_g2mxenon_ELPIS.bin
-copy /b src\2BL\4577\cbb_4577_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\17559\khv_17559_vfuses.bin output\17559\patches_g2mzephyr.bin
+REM *** JTAG phat (xenon/zephyr/falcon/jasper)
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\1940\cbb_1940_jtag.bin + src\4BL\8453\cd_8453_jtag_xenon.bin + src\KHV\17559\khv_17559_jtag.bin output\17559\patches_xenon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\4579\cbb_4579_jtag.bin + src\4BL\8453\cd_8453_jtag_zephyr.bin + src\KHV\17559\khv_17559_jtag.bin output\17559\patches_zephyr.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\5771\cbb_5771_jtag.bin + src\4BL\8453\cd_8453_jtag_falcon.bin + src\KHV\17559\khv_17559_jtag.bin output\17559\patches_falcon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\6750\cbb_6750_jtag.bin + src\4BL\8453\cd_8453_jtag_jasper.bin + src\KHV\17559\khv_17559_jtag.bin output\17559\patches_jasper.bin
 
-REM *** Xenon uses the 5772 CB_B, same as falcon, so the patch sets are the same
+REM *** RGH1 phat
+REM *** Fun fact: RGH1 patch set for phats is universal and there's no CB patch. Still not going to make an RGH1 version of anything else :)
+copy /b src\ffff.bin + src\4BL\8453\cd_8453_glitch.bin + src\KHV\17559\khv_17559_glitch.bin output\17559\patches_fat.bin
+
+REM *** glitch2 phat
+copy /b src\2BL\6752\cbb_6752_glitch2.bin + src\4BL\9452\cd_9452_glitch2.bin + src\KHV\17559\khv_17559_glitch2.bin output\17559\patches_g2jasper.bin
+copy /b src\2BL\5772\cbb_5772_glitch2.bin + src\4BL\9452\cd_9452_glitch2.bin + src\KHV\17559\khv_17559_glitch2.bin output\17559\patches_g2falcon.bin
+copy /b src\2BL\7378\cbb_7378_glitch2.bin + src\4BL\9452\cd_9452_glitch2.bin + src\KHV\17559\khv_17559_glitch2.bin output\17559\patches_g2xenon_ELPIS.bin
+
+REM *** xenon (non-elpis) and zephyr EXT_CLK use falcon bootloaders
+copy output\17559\patches_g2falcon.bin output\17559\patches_g2xenon.bin
+copy output\17559\patches_g2falcon.bin output\17559\patches_g2zephyr.bin
+
+REM *** glitch2 slim
+copy /b src\2BL\9188\cbb_9188_glitch2.bin + src\4BL\9452\cd_9452_glitch2.bin + src\KHV\17559\khv_17559_glitch2.bin output\17559\patches_g2trinity.bin
+copy /b src\2BL\13121\cbb_13121_glitch2.bin + src\4BL\12905\cd_12905_glitch2.bin + src\KHV\17559\khv_17559_glitch2.bin output\17559\patches_g2corona.bin
+copy /b src\2BL\13182\cbb_13182_glitch2.bin + src\4BL\12905\cd_12905_glitch2.bin + src\KHV\17559\khv_17559_glitch2.bin output\17559\patches_g2corona_WB.bin
+copy /b src\2BL\13182\cbb_13182_glitch2_wb4g.bin + src\4BL\12905\cd_12905_glitch2.bin + src\KHV\17559\khv_17559_glitch2.bin output\17559\patches_g2corona_WB4G.bin
+
+REM *** Fun fact, trinity glitch is the same patch set as trinity glitch2
+copy output\17559\patches_g2trinity.bin output\17559\patches_trinity.bin
+
+REM *** glitch2m phat
+copy /b src\2BL\6752\cbb_6752_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\17559\khv_17559_glitch2m.bin output\17559\patches_g2mjasper.bin
+copy /b src\2BL\5772\cbb_5772_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\17559\khv_17559_glitch2m.bin output\17559\patches_g2mfalcon.bin
+copy /b src\2BL\7378\cbb_7378_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\17559\khv_17559_glitch2m.bin output\17559\patches_g2mxenon_ELPIS.bin
+
+REM *** Xenon and Zephyr EXT_CLK uses the 5772 CB_B, same as falcon, so the patch sets are the same
 copy output\17559\patches_g2mfalcon.bin output\17559\patches_g2mxenon.bin
+copy output\17559\patches_g2mfalcon.bin output\17559\patches_g2mzephyr.bin
 
-REM *** Never thought i'd need to do a corona patch set but here we are
-copy /b src\2BL\13121\cbb_13121_vfuses.bin + src\4BL\12905\cd_12905_vfuses.bin + src\KHV\17559\khv_17559_vfuses.bin output\17559\patches_g2mcorona.bin
+REM *** glitch2m slim
+REM *** TODO verify: the default patch set shipped with XeBuild uses the same CB_B patch for glitch2 and glitch2m WB corona. Need to verify this actually works
+copy /b src\2BL\9188\cbb_9188_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\17559\khv_17559_glitch2m.bin output\17559\patches_g2mtrinity.bin
+copy /b src\2BL\13121\cbb_13121_vfuses.bin + src\4BL\12905\cd_12905_vfuses.bin + src\KHV\17559\khv_17559_glitch2m.bin output\17559\patches_g2mcorona.bin
+copy /b src\2BL\13182\cbb_13182_vfuses.bin + src\4BL\12905\cd_12905_vfuses.bin + src\KHV\17559\khv_17559_glitch2m.bin output\17559\patches_g2mcorona_WB.bin
+copy /b src\2BL\13182\cbb_13182_vfuses_wb4g.bin + src\4BL\12905\cd_12905_vfuses.bin + src\KHV\17559\khv_17559_glitch2m.bin output\17559\patches_g2mcorona_WB4G.bin
+copy /b src\2BL\16128\cbb_16128_vfuses.bin + src\4BL\12905\cd_12905_vfuses.bin + src\KHV\17559\khv_17559_glitch2m.bin output\17559\patches_g2mwinchester.bin 
 
 echo Done!
 
+REM ********************************************************
+REM * 15574 FreeBoot patch set
+REM *
+REM * glitch2m, devgl, jtag
+REM ********************************************************
+echo 15574 FreeBoot...
+
+mkdir output\15574
+
+REM *** JTAG phat (xenon/zephyr/falcon/jasper)
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\1940\cbb_1940_jtag.bin + src\4BL\8453\cd_8453_jtag_xenon.bin + src\KHV\15574\khv_15574_jtag.bin output\15574\patches_xenon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\4579\cbb_4579_jtag.bin + src\4BL\8453\cd_8453_jtag_zephyr.bin + src\KHV\15574\khv_15574_jtag.bin output\15574\patches_zephyr.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\5771\cbb_5771_jtag.bin + src\4BL\8453\cd_8453_jtag_falcon.bin + src\KHV\15574\khv_15574_jtag.bin output\15574\patches_falcon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\6750\cbb_6750_jtag.bin + src\4BL\8453\cd_8453_jtag_jasper.bin + src\KHV\15574\khv_15574_jtag.bin output\15574\patches_jasper.bin
+
+REM *** glitch2m phat
+copy /b src\2BL\6752\cbb_6752_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\15574\khv_15574_vfuses.bin output\15574\patches_g2mjasper.bin
+copy /b src\2BL\5772\cbb_5772_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\15574\khv_15574_vfuses.bin output\15574\patches_g2mfalcon.bin
+copy /b src\2BL\7378\cbb_7378_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\15574\khv_15574_vfuses.bin output\15574\patches_g2mxenon_ELPIS.bin
+
+REM *** Xenon and Zephyr EXT_CLK uses the 5772 CB_B, same as falcon, so the patch sets are the same
+copy output\15574\patches_g2mfalcon.bin output\15574\patches_g2mxenon.bin
+copy output\15574\patches_g2mfalcon.bin output\15574\patches_g2mzephyr.bin
+
+REM *** glitch2m slim
+REM *** TODO verify: the default patch set shipped with XeBuild uses the same CB_B patch for glitch2 and glitch2m WB corona. Need to verify this actually works
+copy /b src\2BL\9188\cbb_9188_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\15574\khv_15574_vfuses.bin output\15574\patches_g2mtrinity.bin
+copy /b src\2BL\13121\cbb_13121_vfuses.bin + src\4BL\12905\cd_12905_vfuses.bin + src\KHV\15574\khv_15574_vfuses.bin output\15574\patches_g2mcorona.bin
+copy /b src\2BL\13182\cbb_13182_vfuses.bin + src\4BL\12905\cd_12905_vfuses.bin + src\KHV\15574\khv_15574_vfuses.bin output\15574\patches_g2mcorona_WB.bin
+copy /b src\2BL\13182\cbb_13182_vfuses_wb4g.bin + src\4BL\12905\cd_12905_vfuses.bin + src\KHV\15574\khv_15574_vfuses.bin output\15574\patches_g2mcorona_WB4G.bin
+copy /b src\2BL\16128\cbb_16128_vfuses.bin + src\4BL\12905\cd_12905_vfuses.bin + src\KHV\15574\khv_15574_vfuses.bin output\15574\patches_g2mwinchester.bin 
+
+REM *** Copy addon patches to output
+copy src\KHV\15574\nointmu.bin output\15574\nointmu.bin
+
+echo Done!
+
+REM ********************************************************
+REM * 13604 FreeBoot patch set
+REM *
+REM * glitch2m, devgl, jtag
+REM ********************************************************
+echo 13604 FreeBoot...
+
+mkdir output\13604
+
+REM *** JTAG phat (xenon/zephyr/falcon/jasper)
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\1940\cbb_1940_jtag.bin + src\4BL\8453\cd_8453_jtag_xenon.bin + src\KHV\13604\khv_13604_jtag.bin output\13604\patches_xenon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\4579\cbb_4579_jtag.bin + src\4BL\8453\cd_8453_jtag_zephyr.bin + src\KHV\13604\khv_13604_jtag.bin output\13604\patches_zephyr.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\5771\cbb_5771_jtag.bin + src\4BL\8453\cd_8453_jtag_falcon.bin + src\KHV\13604\khv_13604_jtag.bin output\13604\patches_falcon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\6750\cbb_6750_jtag.bin + src\4BL\8453\cd_8453_jtag_jasper.bin + src\KHV\13604\khv_13604_jtag.bin output\13604\patches_jasper.bin
+
+REM *** glitch2m phat
+copy /b src\2BL\6752\cbb_6752_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\13604\khv_13604_vfuses.bin output\13604\patches_g2mjasper.bin
+copy /b src\2BL\5772\cbb_5772_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\13604\khv_13604_vfuses.bin output\13604\patches_g2mfalcon.bin
+copy /b src\2BL\7378\cbb_7378_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\13604\khv_13604_vfuses.bin output\13604\patches_g2mxenon_ELPIS.bin
+
+REM *** Xenon and Zephyr EXT_CLK uses the 5772 CB_B, same as falcon, so the patch sets are the same
+copy output\13604\patches_g2mfalcon.bin output\13604\patches_g2mxenon.bin
+copy output\13604\patches_g2mfalcon.bin output\13604\patches_g2mzephyr.bin
+
+REM *** glitch2m slim
+REM *** TODO verify: the default patch set shipped with XeBuild uses the same CB_B patch for glitch2 and glitch2m WB corona. Need to verify this actually works
+copy /b src\2BL\9188\cbb_9188_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\13604\khv_13604_vfuses.bin output\13604\patches_g2mtrinity.bin
+copy /b src\2BL\13121\cbb_13121_vfuses.bin + src\4BL\12905\cd_12905_vfuses.bin + src\KHV\13604\khv_13604_vfuses.bin output\13604\patches_g2mcorona.bin
+copy /b src\2BL\13182\cbb_13182_vfuses.bin + src\4BL\12905\cd_12905_vfuses.bin + src\KHV\13604\khv_13604_vfuses.bin output\13604\patches_g2mcorona_WB.bin
+copy /b src\2BL\13182\cbb_13182_vfuses_wb4g.bin + src\4BL\12905\cd_12905_vfuses.bin + src\KHV\13604\khv_13604_vfuses.bin output\13604\patches_g2mcorona_WB4G.bin
+
+REM *** Copy addon patches to output
+copy src\KHV\13604\nointmu.bin output\13604\nointmu.bin
+
+echo Done!
+
+REM ********************************************************
+REM * 9199 FreeBoot patch set
+REM *
+REM * glitch2m/DevGL/JTAG
+REM ********************************************************
+echo 9199 FreeBoot...
+
+mkdir output\9199
+
+REM *** JTAG phat (xenon/zephyr/falcon/jasper)
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\1940\cbb_1940_jtag.bin + src\4BL\8453\cd_8453_jtag_xenon.bin + src\KHV\9199\khv_9199_jtag.bin output\9199\patches_xenon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\4579\cbb_4579_jtag.bin + src\4BL\8453\cd_8453_jtag_zephyr.bin + src\KHV\9199\khv_9199_jtag.bin output\9199\patches_zephyr.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\5771\cbb_5771_jtag.bin + src\4BL\8453\cd_8453_jtag_falcon.bin + src\KHV\9199\khv_9199_jtag.bin output\9199\patches_falcon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\6750\cbb_6750_jtag.bin + src\4BL\8453\cd_8453_jtag_jasper.bin + src\KHV\9199\khv_9199_jtag.bin output\9199\patches_jasper.bin
+
+REM *** glitch2m Falcon/Zephyr/Xenon are all the same patch set
+copy /b src\2BL\5772\cbb_5772_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\9199\khv_9199_vfuses.bin output\9199\patches_g2mfalcon.bin
+copy output\9199\patches_g2mfalcon.bin output\9199\patches_g2mzephyr.bin
+copy output\9199\patches_g2mfalcon.bin output\9199\patches_g2mxenon.bin
+
+REM *** Use 6752 for Jasper
+copy /b src\2BL\6752\cbb_6752_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\9199\khv_9199_vfuses.bin output\9199\patches_g2mjasper.bin
+
+REM *** use CB_B 7378 for elpis
+copy /b src\2BL\7378\cbb_7378_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\9199\khv_9199_vfuses.bin output\9199\patches_g2mxenon_ELPIS.bin
+
+REM *** glitch2m trinity :O
+copy /b src\2BL\9188\cbb_9188_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\9199\khv_9199_vfuses.bin output\9199\patches_g2mtrinity.bin
+
+echo Done!
+
+REM ********************************************************
+REM * 7258 FreeBoot patch set
+REM *
+REM * glitch2m/DevGL/JTAG
+REM ********************************************************
+echo 7258 Beta FreeBoot...
+
+mkdir output\7258
+
+REM *** JTAG phat (xenon/zephyr/falcon/jasper)
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\1940\cbb_1940_jtag.bin + src\4BL\8453\cd_8453_jtag_xenon.bin + src\KHV\7258\khv_7258_jtag.bin output\7258\patches_xenon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\4579\cbb_4579_jtag.bin + src\4BL\8453\cd_8453_jtag_zephyr.bin + src\KHV\7258\khv_7258_jtag.bin output\7258\patches_zephyr.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\5771\cbb_5771_jtag.bin + src\4BL\8453\cd_8453_jtag_falcon.bin + src\KHV\7258\khv_7258_jtag.bin output\7258\patches_falcon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\6750\cbb_6750_jtag.bin + src\4BL\8453\cd_8453_jtag_jasper.bin + src\KHV\7258\khv_7258_jtag.bin output\7258\patches_jasper.bin
+
+REM *** glitch2m Falcon/Zephyr/Xenon are all the same patch set
+copy /b src\2BL\5772\cbb_5772_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\7258\khv_7258_vfuses.bin output\7258\patches_g2mfalcon.bin
+copy output\7258\patches_g2mfalcon.bin output\7258\patches_g2mzephyr.bin
+copy output\7258\patches_g2mfalcon.bin output\7258\patches_g2mxenon.bin
+
+REM *** Use 6752 for Jasper
+copy /b src\2BL\6752\cbb_6752_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\7258\khv_7258_vfuses.bin output\7258\patches_g2mjasper.bin
+
+REM *** use CB_B 7378 for elpis
+copy /b src\2BL\7378\cbb_7378_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\7258\khv_7258_vfuses.bin output\7258\patches_g2mxenon_ELPIS.bin
+
+echo Done!
+
+REM ********************************************************
+REM * 6717 FreeBoot patch set
+REM *
+REM * glitch2m/DevGL/JTAG
+REM ********************************************************
 echo 6717 FreeBoot...
 
 mkdir output\6717
 
-REM *** Falcon/Zephyr/Xenon are all the same patch set
+REM *** JTAG phat (xenon/zephyr/falcon/jasper)
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\1940\cbb_1940_jtag.bin + src\4BL\8453\cd_8453_jtag_xenon.bin + src\KHV\6717\khv_6717_jtag.bin output\6717\patches_xenon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\4579\cbb_4579_jtag.bin + src\4BL\8453\cd_8453_jtag_zephyr.bin + src\KHV\6717\khv_6717_jtag.bin output\6717\patches_zephyr.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\5771\cbb_5771_jtag.bin + src\4BL\8453\cd_8453_jtag_falcon.bin + src\KHV\6717\khv_6717_jtag.bin output\6717\patches_falcon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\6750\cbb_6750_jtag.bin + src\4BL\8453\cd_8453_jtag_jasper.bin + src\KHV\6717\khv_6717_jtag.bin output\6717\patches_jasper.bin
+
+REM *** glitch2m Falcon/Zephyr/Xenon are all the same patch set
 copy /b src\2BL\5772\cbb_5772_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\6717\khv_6717_vfuses.bin output\6717\patches_g2mfalcon.bin
 copy output\6717\patches_g2mfalcon.bin output\6717\patches_g2mzephyr.bin
 copy output\6717\patches_g2mfalcon.bin output\6717\patches_g2mxenon.bin
 
+REM *** Use 6752 for Jasper
 copy /b src\2BL\6752\cbb_6752_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\6717\khv_6717_vfuses.bin output\6717\patches_g2mjasper.bin
 
 REM *** use CB_B 7378 for elpis
@@ -270,33 +571,69 @@ copy /b src\2BL\7378\cbb_7378_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src
 
 echo Done!
 
+REM ********************************************************
+REM * 6770 FreeBoot patch set
+REM *
+REM * glitch2m/DevGL/JTAG
+REM ********************************************************
+echo 6770 FreeBoot...
+
+mkdir output\6770
+
+REM *** JTAG phat (xenon/zephyr/falcon/jasper)
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\1940\cbb_1940_jtag.bin + src\4BL\8453\cd_8453_jtag_xenon.bin + src\KHV\6770\khv_6770_jtag.bin output\6770\patches_xenon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\4579\cbb_4579_jtag.bin + src\4BL\8453\cd_8453_jtag_zephyr.bin + src\KHV\6770\khv_6770_jtag.bin output\6770\patches_zephyr.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\5771\cbb_5771_jtag.bin + src\4BL\8453\cd_8453_jtag_falcon.bin + src\KHV\6770\khv_6770_jtag.bin output\6770\patches_falcon.bin
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\6750\cbb_6750_jtag.bin + src\4BL\8453\cd_8453_jtag_jasper.bin + src\KHV\6770\khv_6770_jtag.bin output\6770\patches_jasper.bin
+
+REM *** glitch2m Falcon/Zephyr/Xenon are all the same patch set
+copy /b src\2BL\5772\cbb_5772_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\6770\khv_6770_vfuses.bin output\6770\patches_g2mfalcon.bin
+copy output\6770\patches_g2mfalcon.bin output\6770\patches_g2mzephyr.bin
+copy output\6770\patches_g2mfalcon.bin output\6770\patches_g2mxenon.bin
+
+REM *** Use 6752 for Jasper
+copy /b src\2BL\6752\cbb_6752_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\6770\khv_6770_vfuses.bin output\6770\patches_g2mjasper.bin
+
+REM *** use CB_B 7378 for elpis
+copy /b src\2BL\7378\cbb_7378_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\6770\khv_6770_vfuses.bin output\6770\patches_g2mxenon_ELPIS.bin
+
+echo Done!
+
+REM ********************************************************
+REM * 1888 FreeBoot
+REM *
+REM * JTAGs tbd
+REM ********************************************************
 echo 1888 FreeBoot...
 
 mkdir output\1888
 
-copy /b src\2BL\6752\cbb_6752_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\1888\khv_1888_vfuses_zeus.bin output\1888\patches_g2mjasper.bin
-copy /b src\2BL\5772\cbb_5772_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\1888\khv_1888_vfuses_rhea.bin output\1888\patches_g2mfalcon.bin
-copy /b src\2BL\5772\cbb_5772_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\1888\khv_1888_vfuses.bin output\1888\patches_g2mxenon.bin
-copy /b src\2BL\5772\cbb_5772_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\1888\khv_1888_vfuses_rhea.bin output\1888\patches_g2mzephyr.bin
+copy /b src\2BL\6752\cbb_6752_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\1888\khv_1888_vfuses.bin output\1888\patches_g2mjasper.bin
 
-REM *** Zephyr A with Y1 uses the same GPU and 5772 CB as Xenon. If an elpis has been installed... bascially just a zephyr C
-copy output\1888\patches_g2mxenon.bin output\1888\patches_g2mzephyr_y1.bin
+REM *** Falcon and earlier use 5772 CB, so the patch sets are identical. The kernel patch can handle any flavour of GPU.
+copy /b src\2BL\5772\cbb_5772_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\1888\khv_1888_vfuses.bin output\1888\patches_g2mfalcon.bin
+copy output\1888\patches_g2mfalcon.bin output\1888\patches_g2mxenon.bin
+copy output\1888\patches_g2mfalcon.bin output\1888\patches_g2mzephyr.bin
+
 
 REM *** Elpis is basically just a fancy Rhea GPU, so the kernel patch can be the same. Use 7378 loader to avoid Samsung + Rhea hwinit issues
-copy /b src\2BL\7378\cbb_7378_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\1888\khv_1888_vfuses_rhea.bin output\1888\patches_g2mxenon_ELPIS.bin
+copy /b src\2BL\7378\cbb_7378_vfuses.bin + src\4BL\9452\cd_9452_vfuses.bin + src\KHV\1888\khv_1888_vfuses.bin output\1888\patches_g2mxenon_ELPIS.bin
 
-REM *** This is a test for falcon JTAGs
+REM *** This is a test for falcon JTAGs... 1888 on JTAG doesn't really work right atm
 copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\5771\cbb_5771_jtag.bin + src\4BL\8453\cd_8453_jtag_1888.bin + src\KHV\1888\khv_vfuses_rhea_jtag.bin output\1888\patches_falcon.bin
 
 
-REM *** 1838 is a bit weird with the patches- ordinarily, you'd thing we'd patch the GPU driver like we do for 1888
-REM *** However, the GPU is LESS stable with the ASIC ID and EDRAM patches. So, we'll leave it alone and let 1838
-REM *** run in a "low performance" backup mode that's better, but still a bit glitchy. You'll need a Y1 for 1838
-REM *** to be useable for anything other than simple demos or looking at the dashboard
-
-REM *** In addition, UNLIKE 17489.... xeBuild puts XeLL in different spots for 16mb DevGL and 16mb glitch2m 1838
-REM *** images. So, that means the SD patch needs to calculate the location of XeLL. Luckily, XeBuild always puts
-REM *** the flashfs after the second patch slot so this can be done relatively easily
+REM *******************************************************
+REM * 1838 XDKBuild
+REM *
+REM * Thanks to Scar (kavkazsila) on Discord for all the
+REM * help getting this going on rhea/zeus GPUs, without
+REM * your help 1838 and 1839 would have been unusable.
+REM *
+REM * Do note that 1838 is NOT usable on any BB PSB
+REM * machines, there is only support for 16MB and 64MB
+REM * small block NAND types in the kernel
+REM *******************************************************
 echo 1838 XDKBuild...
 
 mkdir output\1838
@@ -304,13 +641,22 @@ mkdir output\1838
 copy /b src\2BL\14352\sb_vfuses.bin + src\4BL\12611\sd_vfuses_sb.bin + src\KHV\1838\khv_1838_vfuses.bin output\1838\patches_g2mxenon.bin
 copy output\1838\patches_g2mxenon.bin output\1838\patches_g2mzephyr.bin
 copy output\1838\patches_g2mxenon.bin output\1838\patches_g2mjasper.bin
-
-copy /b src\2BL\14352\sb_vfuses.bin + src\4BL\12611\sd_vfuses_sb.bin + src\KHV\1838\khv_1838_vfuses_rhea.bin output\1838\patches_g2mfalcon.bin
+copy output\1838\patches_g2mxenon.bin output\1838\patches_g2mfalcon.bin
 
 copy /b src\2BL\14352\sb_vfuses.bin + src\4BL\12611\sd_vfuses_sb.bin + src\KHV\1838\khv_1838_vfuses_devkit.bin output\1838\patches_devxenon.bin
 copy output\1838\patches_devxenon.bin output\1838\patches_devzephyr.bin
 copy output\1838\patches_devxenon.bin output\1838\patches_devfalcon.bin
 copy output\1838\patches_devxenon.bin output\1838\patches_devjasper.bin
+
+REM ******************************************************
+REM * JTAGs of other board types don't really care that
+REM * the boot chain we reboot in to is the same falcon
+REM * CB since hwinit is skipped
+REM ******************************************************
+copy /b src\1BL\1411\ca_1411_freeboot.bin + src\2BL\5771\cbb_5771_jtag_rgl.bin + src\4BL\8453\cd_8453_jtag_rgl.bin + src\KHV\1838\khv_1838_vfuses_jtag.bin output\1838\patches_falcon.bin
+copy output\1838\patches_falcon.bin output\1838\patches_xenon.bin
+copy output\1838\patches_falcon.bin output\1838\patches_zephyr.bin
+copy output\1838\patches_falcon.bin output\1838\patches_jasper.bin
 
 echo Done!
 
@@ -347,5 +693,7 @@ goto:eof
 
 :buildPatchSection
 bin\xenon-as.exe %~1\%~2.S -I include -I %~1\inc -o %~1\%~2.bin
+set /a "buildFailed|=%errorlevel%"
 bin\xenon-objcopy.exe %~1\%~2.bin -O binary
+set /a "buildFailed|=%errorlevel%"
 goto:eof

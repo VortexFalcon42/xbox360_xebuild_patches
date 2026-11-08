@@ -1,5 +1,4 @@
 .include "macros.S"
-.set rgloader, 1
 
 #============================================================================
 #   Patches for Hypervisor 21256.18_17489
@@ -37,90 +36,8 @@ MAKEPATCH 0xC60
    ba HV_StartProcPatchAddr
 9:
 
-.ifdef kdnetJtag
-# ============================================================================
-# For JTAGs only, we need to patch KDNet, otherwise the system will panic
-# Thanks to @kavkazsila on discord for pointing it out in the 16537 patch
-# ============================================================================
-
-# ==================================================================
-# SfcxEncodeECC hook, replaces the stwbrx r9, r7, r4
-# ==================================================================
-KMAKEPATCH 0x800C20B8
-0:
-	KMAKEBRANCH 0x801D0F70
-9:
-
-KMAKEPATCH 0x801D0F70
-0:
-   li        %r12, 0x350
-   lis       %r11, -0x69ED
-   ori       %r11, %r11, 0xF6C0
-   cmplw     %r11, %r9
-   beq       SLOT0
-   lis       %r11, 0x7E5B
-   ori       %r11, %r11, 0x6280
-   cmplw     %r11, %r9
-   beq       SLOT1
-
-done:
-   # do what we patched and branch back
-   stwbrx    %r9, %r7, %r4
-   KMAKEBRANCH 0x800C20BC
-
-   SLOT0:
-   lis       %r11, 0xE4
-   ori       %r11, %r11, 0x9AA2
-   sth       %r12, 0x1A(%r4)
-   stw       %r11, 0x1C(%r4)
-   b         done
-
-
-   SLOT1:
-   lis       %r11, 0x4070
-   ori       %r11, %r11, 0xD24A
-   sth       %r12, 0x1A(%r4)
-   stw       %r11, 0x1C(%r4)
-   b         done
-9:
-
-
-# ==================================================================
-# SfcxFinishFlashPassThrough hook, replaces the lwz r11, 0x10(r28)
-# ==================================================================
-KMAKEPATCH 0x800BCB90
-0:
-	KMAKEBRANCH 0x801D0940
-9:
-
-KMAKEPATCH 0x801D0940
-0:
-	lwz %r3, 0(%r31)
-	cmplwi %r3, 0
-	bne loc_924
-	li %r4, 0x10
-	andc %r25, %r25, %r4
-
-loc_924:
-	# Do what we patched and branch back to the next instruction
-	lwz %r11, 0x10(%r28)
-	KMAKEBRANCH 0x800BCB94
-9:
-
-
-# ==================================================================
-# SfcxSynchronousWriteInternal
-# ==================================================================
-KMAKEPATCH 0x800B7578
-0:
-    nop
-9:
-
-KMAKEPATCH 0x800B758C
-0:
-    nop
-9:
-
+.ifdef consoletype_jtag
+.include "kdnetJTAG_17489.S"
 .endif
 
 .endif
@@ -439,7 +356,6 @@ MAKEPATCH FixFusesAddr
 # Additional patches for RGLoader
 # Based on the patch set in https://github.com/GoobyCorp/Xbox-360-Crypto/tree/master/Patches/RGL/17559-dev
 #
-.ifdef rgloader
 
 # ============================================================================
 # Retail XEX2 AES key
@@ -501,6 +417,14 @@ MAKEPATCH FixFusesAddr
 0:
 	li  %r3, 0
 	blr
+9:
+
+# ============================================================================
+#	HvxKeysGetKey - Allow access to all XeKeys properties
+# ============================================================================
+MAKEPATCH 0x00007DD4
+0:
+	b 0x30
 9:
 
 # ============================================================================
@@ -660,6 +584,11 @@ MAKEPATCH 0x00010D08
 # ============================================================================
 #	SataDiskAuthenticateDevice
 # ============================================================================
+	KMAKEPATCH 0x801B0B7C 
+0:
+	KMAKEBRANCH 0x801B0C98
+9:
+
 	KMAKEPATCH 0x801B0C98 
 0:
 	li   %r3, 1
@@ -816,11 +745,15 @@ MAKEPATCH 0x00010D08
 	b 0x5C
 9:
 
+.ifdef someone_complains
 # ============================================================================
 #	Set KdpRetryCount and KdNetRetryCount to 1
 #      (faster boot speed due to smaller kd timeout)
+#
+# This is ifdef'ed out because someone in #coding-corner asked nicely if we
+# could restore the stock kdnet timeout. Might cause the box to take a little
+# longer to boot but yolo if someone complains i can come up with a switch
 # ============================================================================
-
 .set  KdpRetryCount,    0x801DD80C   #default value is 5
 .set  KdNetRetryCount,  0x801DD81C   #default value is 3
 
@@ -833,6 +766,7 @@ MAKEPATCH 0x00010D08
 0:
 	.long 0x00000001  #patch to 1 retry
 9:
+.endif
 
 # ============================================================================
 #	Remove fcrt.bin hash check
@@ -843,19 +777,29 @@ MAKEPATCH 0x00010D08
 9:
 
 # ============================================================================
-#	Disable memory protection on devkits
+# These patches modify the common instruction/data storage interrupt handler
+# routines to make all image memory RWX and all heap memory executable. This
+# is an improved version of the old patch which now honors page protections
+# on heap memory allowing this patch to be enabled at all times even when the
+# back compat emulator is running.
+#
+# They replace the three clrlwi r4, r4, 28 instructions in the HV
+#
+# Thanks to grimdoomer for providing these!
 # ============================================================================
-MAKEPATCH 0x000011BC
+MAKEPATCH 0x000010E0
 0:
-	ba  0x15F0
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
 9:
 
-MAKEPATCH 0x000015F0
+MAKEPATCH 0x000010FC
 0:
-	li  %r4, 7
-	.long 0x7C212078
-	.long 0x7C35EBA6
-	ba 0x11C0
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
+9:
+
+MAKEPATCH 0x00001324
+0:
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
 9:
 
 MAKEPATCH 0x00030090
@@ -1098,6 +1042,70 @@ KMAKEPATCH ldBranchAddr
 	blr
 9:
 
+#============================================================================
+# PREVENT ATTEMPTS TO LOAD XBDM FROM HDD ROOT
+#
+# XexpLoadDirsSystem is a priority ordered list of paths to load a module
+# XexpLoadDirHddRoot is first so we can just replace that with the last one
+# XexpLoadDirSystemRoot to force it to use the xdbm from flash
+# xbdm is loaded before our system module so we can undo this patch on load.
+#============================================================================
+KMAKEPATCH 0x801D0824
+0:                                      
+	.long 0x80041B70
+9:
+
+#============================================================================
+# usbdsec patch by @InvoxiPlayGames that allows for 3rd party Xinput devices
+#
+# Note: the devkit kernel version of this patch has an extra nop
+#============================================================================
+# patches UsbdIsDeviceAuthenticated to report all devices as authenticated
+KMAKEPATCH 0x801051B8
+0:
+   li %r3, 1
+   blr
+9:
+
+# patches inside WgcAddDevice to allow for more leniency on the interface descriptor
+KMAKEPATCH 0x801341F4
+0:
+   b 0x10
+9:
+
+# Patches a breakpoint that locks up the machine in WgcBindToUser
+KMAKEPATCH 0x801331F0
+0:
+   nop
+9:
+
+#============================================================================
+# XEX1, XEX% and XEX- support, for running executables from devkit builds 1838, 1746 and 1640
+#============================================================================
+.ifdef xex1
+.include "xex1_17489.S"
+
+# The hook at 0xB208 turns imports older than the exporter's minimum version into
+# li r3, 0. The kernel's minimum is 2.0.1861.0, so that's every import in an XEX1.
+# That's the only case it stubs, so with this the hook just writes the thunk.
+MAKEPATCH 0x0000B224
+0:
+	b 0x8
+9:
+
+# A converted XEX1 fails the signature check at 0x29C14, and the retail decryption
+# patches above then give it the retail key, but XEX1s use the zero key. Those
+# patches also leave the second signature check here unused, so its space can go to
+# sending anything with the XEX1 marker to the zero key at 0x29C84.
+MAKEPATCH 0x00029C20
+0:
+	lwz     %r11, 0(%r31)
+	lis     %r10, XEX_MAGIC_HI
+	ori     %r10, %r10, XEX_MAGIC_XEX1
+	cmplw   cr6, %r11, %r10
+	beq     cr6, 0x54
+	b       0x28
+9:
 .endif
 
 #============================================================================

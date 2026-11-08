@@ -17,6 +17,9 @@
 # features are enabled.
 .set HV_FlagFixer, 0xFA00
 .set FixFusesAddr, 0xFAD4
+.set HV_PP_Syscall0, 0xFB00
+
+.set HV_setmemprot, 0x15D4
 
 #============================================================================
 #   Patches for Hypervisor 1838.0
@@ -183,9 +186,20 @@ MAKEPATCH HV_FlagFixer
    sth %r3, 6(0)
 
    # Load the virtual fuses from NAND
+
+   bla HV_HvpGetFlashBaseAddress
+
+.ifdef consoletype_jtag
+   # JTAGs use virtual fuses too!
+   # They're always at address 0x95000, don't need to
+   # do any patch slot size/count calculations 
+   oris %r4, %r3, 9
+   ori %r4, %r4, 0x5000
+   nop
+   nop
+.else
    # 0x64 (patch slot address) 0x70 (patch slot size)
    # let us calculate the location of the vfuses
-   bla HV_HvpGetFlashBaseAddress
    lwz %r4, 0x64(%r3)
    lwz %r5, 0x70(%r3)
 
@@ -193,6 +207,7 @@ MAKEPATCH HV_FlagFixer
    # the second patch slot, comment this out if you use the 1st
    add %r3, %r3, %r4
    add %r4, %r3, %r5
+.endif
 
    lis %r3, 1
    # 0x60 bytes, 0xC 64bit vals to copy
@@ -242,6 +257,99 @@ MAKEPATCH FixFusesAddr
 9:
 
 # ============================================================================
+# Syscall 0 Backdoor (FreeBoot, RGL, etc.)
+#
+# This is a version of the standard syscall 0 backdoor that removes the
+# memory protection toggles, since they're no longer needed.
+#
+#;// HvxExecute  Params( 0x72627472, 4, (QWORD)srcAddr, (QWORD)destAddr, (QWORD) lenInBytes)  will jump to destAddr after memcpy
+#;// MemCpy      Params( 0x72627472, 5, (QWORD)srcAddr, (QWORD)destAddr, (QWORD) lenInBytes)
+# ============================================================================
+MAKEPATCH HV_PP_Syscall0
+0:
+   lis %r11, 0x7262                  # Freeboot syscall key - 0x72627472 "rbtr" 1st half
+   ori %r11, %r11, 0x7472            # 2nd half
+
+   cmplw cr6, %r3, %r11             # Check for the magic key 0x72627472
+   beq cr6, checkOpType             # Branch to checkOpType if matches - 0xb578
+   ba HV_HvxGetVersions             # If not, branch back to the real HvxGetVersions
+
+checkOpType:
+   cmplwi cr6, %r4, 4               # Check for 4 aka hvxExecute
+   bgt cr6, doMemCpy                # If it's greter than 4 it must be MemCpy         
+   beq cr6, hvxExecuteCode          # If it matches then it's hvxExecute
+   li %r3, 1                        # Otherwise, just return 1. The memory protection patches do nothing.
+   blr
+
+hvxExecuteCode:
+   mflr %r12
+   std %r12, -8(%r1)
+   stdu %r1, -0x10(%r1)
+   mtlr %r5
+   mtctr %r7
+
+cpyLoop:
+   lwz %r4, 0(%r6)
+   stw %r4, 0(%r5)
+   dcbst 0, %r5
+   icbi 0, %r5
+   sync 0
+   isync
+   addi %r5, %r5, 4
+   addi %r6, %r6, 4
+   bdnz cpyLoop
+   blr
+   addi %r1, %r1, 0x10
+   ld %r12, -8(%r1)
+   mtlr %r12
+   blr
+
+doMemCpy:
+   cmplwi cr6, %r4, 5
+   bne cr6, returnTwo   # Branch to returnTwo
+   mr %r3, %r6
+   mr %r4, %r5
+   mr %r5, %r7
+   ba HV_memcpy         # Branch to the HV MemCpy function
+
+returnTwo:
+   li %r3, 2
+   blr
+9:
+
+# ============================================================================
+# Set the address of the syscall 0 backdoor in the syscall table
+# ============================================================================
+MAKEPATCH Syscall_Table
+0:
+   .long HV_PP_Syscall0
+9:
+
+# ============================================================================
+# These patches modify the common instruction/data storage interrupt handler
+# routines to make all image memory RWX and all heap memory executable. This
+# is an improved version of the old patch which now honors page protections
+# on heap memory allowing this patch to be enabled at all times even when the
+# back compat emulator is running.
+#
+# Thanks to grimdoomer for providing these!
+# ============================================================================
+MAKEPATCH 0x00001288
+0:
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
+9:
+
+MAKEPATCH 0x0000105C
+0:
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
+9:
+
+MAKEPATCH 0x00001078
+0:
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
+9:
+
+# ============================================================================
 #	HvxKeysRsaPrvCrypt - Allow access to all XeKeys properties
 # ============================================================================
 # 00 00 81 3C 00 00 00 01 48 00 00 30
@@ -258,6 +366,34 @@ MAKEPATCH 0x00003B30
 0:
    b 0x10
 9:
+
+# 1838... for a JTAG????
+.ifdef consoletype_jtag
+
+.set HV_StartProcPatchAddr, 0xFC00
+
+# ============================================================================
+# For JTAGs only, we need to patch HvxStartupProcessors
+#
+# The following patch replaces (addis r4, r3, -3) with a branch to our custom
+# function, the custom function will then branch back to the instruction
+# after what we replaced
+# ============================================================================
+MAKEPATCH HV_StartProcPatchAddr
+0:
+   lis %r4, -0x8000
+   sldi %r4, %r4, 0x20
+   oris %r4, %r4, 0x100
+   ori %r4, %r4, 0x3080
+   ba 0x2214
+9:
+
+MAKEPATCH 0x2210
+0:
+   ba HV_StartProcPatchAddr
+9:
+
+.endif
 
 #
 # Kernel Patches
@@ -326,3 +462,21 @@ KMAKEPATCH 0x800C1AE0
    blr
 9:
 
+#=============================================================================
+# usbdsec patch
+#
+# Fun fact, 1838 does not have a UsbdIsDeviceAuthenticated function
+#=============================================================================
+.set WgcAddDevice_bne, 0x800D91DC
+.set WgcAddDevice_BranchLocation, 0x4
+.set WgcBindToUserNop, 0x800D8668
+
+KMAKEPATCH WgcAddDevice_bne
+0:
+   b WgcAddDevice_BranchLocation
+9:
+
+KMAKEPATCH WgcBindToUserNop
+0:
+   nop
+9:

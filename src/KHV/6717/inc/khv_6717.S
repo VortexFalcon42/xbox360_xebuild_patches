@@ -117,35 +117,32 @@ MAKEPATCH 0x000000F0 # devkit xex key
    .long 0x00000000
 9:
 
-MAKEPATCH 0x00001420
+# ============================================================================
+# These patches modify the common instruction/data storage interrupt handler
+# routines to make all image memory RWX and all heap memory executable. This
+# is an improved version of the old patch which now honors page protections
+# on heap memory allowing this patch to be enabled at all times even when the
+# back compat emulator is running.
+#
+# Thanks to grimdoomer for providing these!
+# ============================================================================
+MAKEPATCH 0x00001070
 0:
-   cmplwi %r0, 0x7c
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
+9:
+
+MAKEPATCH 0x0000108C
+0:
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
+9:
+
+MAKEPATCH 0x00001268
+0:
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
 9:
 
 # ============================================================================
-# Disable memory protection
-#	ExceptionVectorDSI
-# ============================================================================
-MAKEPATCH 0x0000114C
-0:
-   ba HV_setmemprot
-9:
-
-# ============================================================================
-#	The li %r4, 7 in this is modified by the syscall0 backdoor
-#	to toggle the memory protection state.
-#	ENABLED = 0x38800000 (li %r4, 0) || DISABLED = 0x38800007 (li %r4, 7)
-# ============================================================================
-MAKEPATCH HV_setmemprot
-0:
-   li %r4, 7				# DISABLED by default
-   andc %r1, %r1, %r4
-   mtspr 0x3b5, %r1
-   ba 0x1150
-9:
-
-# ============================================================================
-# HvxLockL2... Disables fuse blowing ???
+# Disable HvxBlowFuses
 # ============================================================================
 MAKEPATCH 0x000079F0
 0:
@@ -224,7 +221,8 @@ MAKEPATCH 0x0000CF80
    bl PrintChar
    mtlr %r8
 
-   # Branch back to where we came from 
+   # do the instruction we patched and branch back to where we came from
+   li %r3, 0x0200
    ba resumeInit 	# 0x19A4
 
 PrintChar:
@@ -267,26 +265,6 @@ checkOpType: # 0xD018
    cmplwi cr6, %r4, 4             # Check for 4, aka hvxExecute
    bgt cr6, doMemCpy 	         # >4 must be MemCpy (0xD0B0)
    beq cr6, hvxExecuteCode 	   # If it matches, must be hvxExecute
-   li %r5, HV_setmemprot 	      # Memory protection function address
-   lis %r6, 0x3880                # Sets %r6 to 0x38800000 - Remains like this if protections are to be ENABLED
-   cmplwi cr6, %r4, 2             # Check for 2 aka set mem protections DISABLED
-   bne cr6, checkforMemProtectOn # If not, branch to check for mem protections ENABLED - 0xd03c
-   ori %r6, %r6, 7                 # Updates %r6 to 0x38800007 - Indicating protections are to be DISABLED
-   b setMemProtections           # Branch to set memory protections setup 0xd044
-
-checkforMemProtectOn:
-   cmplwi cr6, %r4, 3             # Check for 3 aka set mem protections ENABLED
-   bne cr6, returnOne 		      # If not, branch to returnOne to exit 0xD05C
-
-setMemProtections:
-   li %r0, 0
-   stw %r6, 0(%r5)                 # Sets the start of the set mem function based on what was set in %r6 earlier - ENABLED = 0x38800000 (li %r4, 0) || DISABLED = 0x38800007 (li %r4, 7)
-   dcbst 0, %r5
-   icbi 0, %r5
-   sync
-   isync
-
-returnOne:
    li %r3, 1
    blr
 
@@ -463,27 +441,27 @@ MAKEPATCH 0x00003DC8
 0:
    # This section overwrites a check on the return value of XeCryptBnQwBeSigVerify disabling STATUS_IMAGE_CHECKSUM_MISMATCH - C0000221
    cmpldi cr6, %r28, 0   # Value set from %r4 being passed to main function being patched
-   beq cr6, loc_3dfc    # Branch if zero. This is how it's handled by the function normally when XeCryptBnQwBeSigVerify returns non-zero
+   beq cr6, xex_ret_zero    # Branch if zero. This is how it's handled by the function normally when XeCryptBnQwBeSigVerify returns non-zero
 
    cmpwi cr6, %r3, 0     # Check the return value of XeCryptBnQwBeSigVerify performed just before these patches
-   bne cr6, loc_3de4    # Branch when non-zero
+   bne cr6, xex_proc_key    # Branch when non-zero
 
    li %r4, 0xf0          # Address of Devkit XEX2 AES key that has been set to all zero.
-   b loc_3df4
+   b xex_setkey
    nop
 
    # Everything below remains unchanged??? Maybe it's just here to make it easier to create branches when compiling???
-loc_3de4:
+xex_proc_key:
    cmplwi cr6, %r29, 0
    addi %r4, %r31, 0x440
-   bne cr6, loc_3df4
+   bne cr6, xex_setkey
    li %r4, 0x54          # Address of Retail XEX2 AES key - 20 B1 85 A5 9D 28 FD C3 40 58 3F BB 08 96 BF 91
 
-loc_3df4:
+xex_setkey:
    mr %r3, %r28
    MAKEBRANCHL j_XeCryptAesKey
 
-loc_3dfc:
+xex_ret_zero:
    li %r31, 0
 9:
 
@@ -509,6 +487,20 @@ MAKEPATCH 0x000040A8
 MAKEPATCH 0x000042F0
 0:
    nop
+9:
+
+# ============================================================================
+# HvFixKeys patch for zero fuse consoles
+# ============================================================================
+MAKEPATCH 0x00003378 # disable copying transform key from SoC
+0:
+	nop
+9:
+
+MAKEPATCH  0x00000018 # pbkey xex2key make transform key 81300D49C232F145
+0:
+	.long 0x81300D49
+	.long 0xC232F145
 9:
 
 #
@@ -622,12 +614,6 @@ KMAKEPATCH 0x800ECBA0
    blr
 9:
 
-KMAKEPATCH 0x800ECBF0
-0:
-   li %r3, 1
-   KMAKEBRANCH(0x800ecc18)
-9:
-
 #=============================================================================
 # Patches XeCryptBnQwBeSigVerify
 #=============================================================================
@@ -665,6 +651,15 @@ KMAKEPATCH 0x80118028
 KMAKEPATCH 0x80117EC8
 0:
    KMAKEBRANCH 0x80118028
+9:
+
+#============================================================================
+# Patch the call to XeCryptBnDwLePkcs1Verify to always return SUCCESS
+# when verifying the security sector
+#============================================================================
+KMAKEPATCH 0x80117FEC
+0:
+   li %r3, 1
 9:
 
 #============================================================================
@@ -740,6 +735,23 @@ KMAKEPATCH XeKeysFreeSpace
 KMAKEPATCH 0x80078008
 0:
    li %r3, 0
+9:
+
+#============================================================================
+# usbdsec patch by @InvoxiPlayGames that allows for 3rd party Xinput devices
+#============================================================================
+
+# patches UsbdIsDeviceAuthenticated to report all devices as authenticated
+KMAKEPATCH 0x800C5950
+0:
+   li %r3, 1
+   blr
+9:
+
+# patches inside WgcAddDevice to allow for more leniency on the interface descriptor
+KMAKEPATCH 0x800E48A4
+0:
+   b 0x4
 9:
 
 .long 0xffffffff

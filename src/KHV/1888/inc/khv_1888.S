@@ -134,28 +134,28 @@ MAKEPATCH 0xF0
    .long 0
 9:
 
-# ============================================================================	
-# Disable memory protection
-#	ExceptionVectorDSI
 # ============================================================================
-# 00 00 11 BC 00 00 00 01 48 00 15 4E
-MAKEPATCH 0x1134
+# These patches modify the common instruction/data storage interrupt handler
+# routines to make all image memory RWX and all heap memory executable. This
+# is an improved version of the old patch which now honors page protections
+# on heap memory allowing this patch to be enabled at all times even when the
+# back compat emulator is running.
+#
+# Thanks to grimdoomer for providing these!
+# ============================================================================
+MAKEPATCH 0x0000124C
 0:
-   ba HV_setmemprot
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
 9:
 
-# ============================================================================
-#	The li %r4, 7 in this is modified by the syscall0 backdoor 
-#	to toggle the memory protection state.
-#	ENABLED = 0x38800000 (li r4, 0) || DISABLED = 0x38800007 (li r4, 7)
-# ============================================================================
-# 00 00 15 4C 00 00 00 04 38 80 00 07 7C 21 20 78 7C 35 EB A6 48 00 11 C2
-MAKEPATCH HV_setmemprot
+MAKEPATCH 0x0000105C
 0:
-   li %r4, 7             # DISABLED by default
-   andc %r1, %r1, %r4
-   mtspr 0x3b5, %r1      # do what we patched
-   ba 0x1138             # branch to the next instruction 
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
+9:
+
+MAKEPATCH 0x00001078
+0:
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
 9:
 
 # ============================================================================
@@ -297,26 +297,6 @@ checkOpType:
    cmplwi cr6, %r4, 4                # Check for 4 aka hvxExecute
    bgt cr6, doMemCpy                # If it's greter than 4 it must be MemCpy         
    beq cr6, hvxExecuteCode          # If it matches then it's hvxExecute
-   li %r5, HV_setmemprot             # Memory protections function address added in an earlier patch
-   lis %r6, 0x3880                   # Sets r6 to 0x38800000 - Remains like this if protections are to be ENABLED
-   cmplwi cr6, %r4, 2                # Check for 2 aka set mem protections DISABLED     
-   bne cr6, checkForMemProtectOn    # If not, branch to check for mem protections ENABLED - 0xb59c
-   ori %r6, %r6, 7                    # Updates r6 to 0x38800007 - Indicating protections are to be DISABLED
-   b setMemProtections              # Branch to set memory protections setup 
-
-checkForMemProtectOn:   
-   cmplwi cr6, %r4, 3                # Check for 3 aka set mem protections ENABLED
-   bne cr6, returnOne               # If not, branch to returnOne to exit - 0xb5bc
-
-setMemProtections:
-   li %r0, 0
-   stw %r6, 0(%r5)                    # Sets the start of the set mem function based on what was set in r6 earlier - ENABLED = 0x38800000 (li r4, 0) || DISABLED = 0x38800007 (li r4, 7)
-   dcbst 0, %r5
-   icbi 0, %r5
-   sync 0
-   isync
-
-returnOne:
    li %r3, 1
    blr
 
@@ -578,6 +558,16 @@ KMAKEPATCH 0x800DD808
 9:
 
 #============================================================================
+# Patch the call to XeCryptBnDwLePkcs1Verify to always return SUCCESS
+# when verifying the security sector
+#============================================================================
+KMAKEPATCH 0x800DD914
+0:
+   li %r3, 1
+9:
+
+
+#============================================================================
 # Patch FatxProcessBootSector to ignore sector size limit, allowing drives
 # up to 2TB to function properly (Thanks @Eaton!)
 #============================================================================
@@ -650,33 +640,111 @@ KMAKEPATCH XeKeysFreeSpace
 
 .ifdef patch_gpu
 #============================================================================
-# Patch VdpOneTimeDeviceInitialize to spoof the GPU ID to avoid E78
+# Patch VdpOneTimeDeviceInitialize to bypass E78
 #============================================================================
-KMAKEPATCH 0x800DE5FC
+KMAKEPATCH 0x800DE6A8
 0:
-    li %r11, 0x11 #Prod GPU
+    b +0x10
 9:
 
-# Another option to skip the GPU version check is to patch the bge before the call to VdDisplayFatalError
-# KMAKEPATCH 0x800DE6A8
-# 0:
-#     b +0x10
-# 9:
+#============================================================================
+# Patch VdGetGraphicsAsicID to always return 0x11
+#============================================================================
+KMAKEPATCH 0x800919EC
+0:
+   li %r3, 0x11
+9:
 
 #============================================================================
-# Patch VdInitializeEdram to set edram timing, otherwise graphics will look screwy
+# Patch VdInitializeEdram to jump to a function that sets edram timing,
+# otherwise graphics will look screwy
 #============================================================================
 KMAKEPATCH 0x80098688
 0:
-.ifdef patch_gpu_zeus
-   li %r10, 0x15 # Zeus/Kronos timing
-.endif
-
-.ifdef patch_gpu_rhea
-   li %r10, 0x1E # Rhea timing
-.endif
+   KMAKEBRANCH 0x800BC13C
 9:
 
+#============================================================================
+# We've got some more space inside XeKeysConsoleSignatureVerification, use it
+# for the EDRAM timing patch
+#============================================================================
+.set VdDisplayFatalError, 0x80092030
+KMAKEPATCH 0x800BC13C
+0:
+   # Load the actual ASIC ID from RAM
+   lis %r4, -0x7FF1
+   lwz %r3, 0x41AC(%r4)
+
+   # Check for Y1 (ASIC ID 0x11)
+   cmplwi cr6, %r3, 0x11
+   bne cr6, not_a_y1
+
+   # Y1 edram timing = 0x1A
+   li %r10, 0x1A
+   KMAKEBRANCH 0x8009868C
+
+not_a_y1:
+   # We're running something *other* than a Y1.
+   # The upper 16 bits will contain the Xenos ID
+   srwi %r3, %r3, 16
+
+   # Check for Rhea (Xenos ID 0x5821)
+   cmplwi cr6, %r3, 0x5821
+   bne cr6, check_gunga
+
+   # It's a rhea GPU, set the edram timing and jump back
+   li %r10, 0x1E
+   KMAKEBRANCH 0x8009868C
+
+check_gunga:
+   # Check for Gunga (Xenos ID 0x5831)
+   cmplwi cr6, %r3, 0x5831
+
+   # If it's not a Rhea, and not a Gunga, we're kind of fucked.
+   # It's probably a slim which is unsupported so throw an E78
+   bne cr6, throw_e78
+
+   # Zeus/Kronos timing
+   li %r10, 0x15
+   KMAKEBRANCH 0x8009868C
+
+throw_e78:
+   lis %r3, 1
+   ori %r3, %r3, 0x244E
+   KMAKEBRANCHL VdDisplayFatalError
+9:
+
+#============================================================================
+# Patch the 1888 kernel to store the entire ASIC id in the bytes we've got,
+# similar to what later kernels that actually support Rhea/Gunga do.
+# This is also in some leftover bytes from XeKeysConsoleSignatureVerification
+#============================================================================
+KMAKEPATCH 0x800DE60C
+0:
+   KMAKEBRANCH 0x800BC1C0
+9:
+
+KMAKEPATCH 0x800BC1C0
+0:
+   addi %r9, %r1, 0x52
+   lhbrx %r10, 0, %r9
+   clrlwi %r10, %r10, 16
+
+   # When later kernels detect a Y1, they'll skip ORing the Xenos ID
+   cmplwi cr6, %r10, 0x5811
+   beq cr6, its_a_y1
+
+   slwi %r10, %r10, 16
+   or %r11, %r10, %r11
+
+its_a_y1:
+   stw %r11, 0x41AC(%r28)
+   KMAKEBRANCH 0x800DE610
+9:
+
+#============================================================================
+# Patch VdInitializeEdram... i don't remember what this does exactly LOL
+#============================================================================
 KMAKEPATCH 0x800986D0
 0:
    li %r4, 0x31
@@ -688,6 +756,23 @@ KMAKEPATCH 0x80098718
 9:
 
 .endif
+
+#============================================================================
+# usbdsec patch by @InvoxiPlayGames that allows for 3rd party Xinput devices
+#============================================================================
+
+# patches UsbdIsDeviceAuthenticated to report all devices as authenticated
+KMAKEPATCH 0x800A0A08
+0:
+   li %r3, 1
+   blr
+9:
+
+# patches inside WgcAddDevice to allow for more leniency on the interface descriptor
+KMAKEPATCH 0x800B862C
+0:
+   b 0x4
+9:
 
 # done with patch section
 

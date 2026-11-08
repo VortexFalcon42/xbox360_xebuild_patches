@@ -1,5 +1,5 @@
 # Builds 17559 kernel patch set with vfuse support
 
-.set vfuses, 1
+.set jtag_vfuses, 1
 
-.include "khv_17559.S"
+.include "khv_6770.S"

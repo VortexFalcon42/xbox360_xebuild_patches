@@ -2,5 +2,6 @@
 # RGLoader uses this
 
 .set skip_patch_slots, 1
+.set rgloader, 1
 
-.include "cd_8453.S"
+.include "cd_8453_jtag_base.S"

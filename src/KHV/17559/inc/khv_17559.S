@@ -13,19 +13,7 @@
 .set HV_HvpGetFlashBaseAddress, 0x68C
 .set HV_HvpFlashCopy, 0x484
 
-.set HV_FlagFixer, 0xB510
 .set HV_setmemprot, 0x154c
-
-# Functions within the patches, some of these change depending on what
-# features are enabled.
-.ifdef vfuses
-   .set FixFusesAddr, 0xB560
-   .set PrintChar, 0xB56C
-   .set HV_PP_Syscall0, 0xB594
-.else
-   .set PrintChar, 0xB53C
-   .set HV_PP_Syscall0, 0xB564
-.endif
 
 # ============================================================================
 #	Branch to HV flag fix function???
@@ -36,18 +24,40 @@ MAKEPATCH 0x1880
 	bla HV_FlagFixer
 9:
 
+.ifdef jtag
+#============================================================================
+# For JTAGs only, we need to patch HvxStartupProcessors
+#
+#   Change Thread Hold Address      addis   r4, r3, -3                       
+#============================================================================
+MAKEPATCH 0x00000C60
+.set FixHoldAddrDone, (PatchAddr + (9f - 0f))
+0:
+	ba      FixHoldAddr
+9:
+.endif
+
 # ============================================================================
 # Vfuse patches for the HV
 # ============================================================================
 .ifdef vfuses
+
+.ifndef jtag
+# ============================================================================
+# force glitch mfg to use 0x0 cpu key for cbb as the mfg flag is removed
+#
+# Notes from cOz release: this is only set for VFUSE and GLICTH, does this
+# imply that JTAGs don't need this patch? Probably.
+# ============================================================================
 MAKEPATCH 0x000071EC
 0:
 	nop
 9:
+.endif
 
 MAKEPATCH 0x00001D10
 0:
-	bla 0xb560
+	bla FixFusesAddr
 9:
 
 MAKEPATCH 0x00001D24
@@ -58,7 +68,7 @@ MAKEPATCH 0x00001D24
 
 MAKEPATCH 0x00009778
 0:
-	bla 0xb560
+	bla FixFusesAddr
 9:
 
 MAKEPATCH 0x000097A8
@@ -69,7 +79,7 @@ MAKEPATCH 0x000097A8
 
 MAKEPATCH 0x00009918
 0:
-	bla 0xb560
+	bla FixFusesAddr
 9:
 
 MAKEPATCH 0x00009948
@@ -80,7 +90,7 @@ MAKEPATCH 0x00009948
 
 MAKEPATCH 0x00009A68
 0:
-	bla 0xb560
+	bla FixFusesAddr
 9:
 
 MAKEPATCH 0x00009A98
@@ -91,7 +101,7 @@ MAKEPATCH 0x00009A98
 
 MAKEPATCH 0x00009D08
 0:
-	bla 0xb560
+	bla FixFusesAddr
 9:
 
 MAKEPATCH 0x00009D38
@@ -102,7 +112,7 @@ MAKEPATCH 0x00009D38
 
 MAKEPATCH 0x0000A078
 0:
-	bla 0xb560
+	bla FixFusesAddr
 9:
 
 MAKEPATCH 0x0000A0A8
@@ -113,7 +123,7 @@ MAKEPATCH 0x0000A0A8
 
 MAKEPATCH 0x0000A138
 0:
-	bla 0xb560
+	bla FixFusesAddr
 9:
 
 MAKEPATCH 0x0000A168
@@ -125,7 +135,7 @@ MAKEPATCH 0x0000A168
 
 MAKEPATCH 0x0000A470
 0:
-	bla 0xb560
+	bla FixFusesAddr
 9:
 
 MAKEPATCH 0x0000A49C
@@ -154,30 +164,32 @@ MAKEPATCH 0xF0
 
 # ============================================================================	
 # Disable memory protection
-#	ExceptionVectorDSI
+#
+# These patches modify the common instruction/data storage interrupt handler
+# routines to make all image memory RWX and all heap memory executable. This
+# is an improved version of the old patch which now honors page protections
+# on heap memory allowing this patch to be enabled at all times even when the
+# back compat emulator is running.
+#
+# Thanks to grimdoomer for providing these!
 # ============================================================================
-# 00 00 11 BC 00 00 00 01 48 00 15 4E
-MAKEPATCH 0x11BC
+MAKEPATCH 0x000012D8
 0:
-	ba HV_setmemprot
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
+9:
+
+MAKEPATCH 0x000010E0
+0:
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
+9:
+
+MAKEPATCH 0x000010FC
+0:
+   andi.    %r4, %r4, 0xA        # PTE & (V-D-) = clear NoExecute and ReadOnly
 9:
 
 # ============================================================================
-#	The li %r4, 7 in this is modified by the syscall0 backdoor 
-#	to toggle the memory protection state.
-#	ENABLED = 0x38800000 (li r4, 0) || DISABLED = 0x38800007 (li r4, 7)
-# ============================================================================
-# 00 00 15 4C 00 00 00 04 38 80 00 07 7C 21 20 78 7C 35 EB A6 48 00 11 C2
-MAKEPATCH HV_setmemprot
-0:
-	li %r4, 7             # DISABLED by default
-	andc %r1, %r1, %r4
-	mtspr 0x3b5, %r1      # .long 0x7C35EBA6
-	ba 0x11c0
-9:
-
-# ============================================================================
-#	??? nop's something out
+# disable LDV check
 # ============================================================================
 # 00 00 31 20 00 00 00 01 60 00 00 00
 MAKEPATCH 0x3120
@@ -186,7 +198,7 @@ MAKEPATCH 0x3120
 9:
 
 # ============================================================================
-# 	Disable fuse blowing ???
+# disable HvxBlowFuses
 # ============================================================================
 # 00 00 A5 60 00 00 00 02 38 60 00 01 4E 80 00 20
 MAKEPATCH 0x0000A560
@@ -196,7 +208,7 @@ MAKEPATCH 0x0000A560
 9:
 
 # ============================================================================
-#	HvxLoadImageData - nop's out a sig check?
+#	HvxLoadImageData - ignores return of SHA memdiff (for devkit xex)
 # ============================================================================
 # 00 02 A3 0C 00 00 00 02 60 00 00 00 60 00 00 00
 MAKEPATCH 0x0002A30C
@@ -229,13 +241,30 @@ MAKEPATCH 0x0002AA8C
 #	HV Flag Fixer??? branched from 0x1880
 #	Followed by HV Syscall0 PeekPoke backdoor starting at 0xB594
 # ============================================================================
-MAKEPATCH HV_FlagFixer
+MAKEPATCH 0x0000B510
+
+.set HV_FlagFixer, PatchAddr
+
+.ifdef vfuses
+	.set FixFusesAddr, (PatchAddr + (1f - 0f))
+.endif
+.ifdef jtag
+	.set FixHoldAddr, (PatchAddr + (2f - 0f))
+.endif
+	.set PrintChar, (PatchAddr + (3f - 0f))
+	.set HV_PP_Syscall0, (PatchAddr + (5f - 0f))
 0:
 	mflr %r8
+
+.ifdef rgh1_fat
+	li %r3, -0x2FE2 # remove mfg mode C01E|1000 or C01E|2000 0xD01E(slot1) 0xE01E(slot2)
+	sth %r3, 6(0)
+.else
 	lhz %r3, 6(0)
 	li %r4, 0x21
 	andc %r3, %r3, %r4
 	sth %r3, 6(0)
+.endif
 
    # This is the vfuse loading code
    # Seems like it's smart enough to look
@@ -244,10 +273,19 @@ MAKEPATCH HV_FlagFixer
    # hardcodes this to 0xE0000 which is kind of stupid IMO
 .ifdef vfuses
 	bla HV_HvpGetFlashBaseAddress
-	lwz %r4, 0x64(%r3) # 0x64 in NAND is the patch slot address
-	lwz %r5, 0x70(%r3) # 0x70 in NAND is the patch slot size
-	add %r3, %r3, %r4
-	add %r4, %r3, %r5
+
+	.ifdef jtag
+		# JTAGs use virtual fuses too!
+		# They're always at address 0x95000, don't need to
+		# do any patch slot size/count calculations 
+		oris %r4, %r3, 9
+		ori %r4, %r4, 0x5000
+	.else
+		lwz %r4, 0x64(%r3) # 0x64 in NAND is the patch slot address
+		lwz %r5, 0x70(%r3) # 0x70 in NAND is the patch slot size
+		add %r3, %r3, %r4
+		add %r4, %r3, %r5
+	.endif
 
 	lis %r3, 1
 	subi %r3, %r3, 0x60
@@ -265,13 +303,24 @@ MAKEPATCH HV_FlagFixer
 
 # ---------------------------------------------------
 # FixFusesAddr
-# 0xB560 w/ vfuses
-# TODO figure out how to calculate this automatically
 # ---------------------------------------------------
 .ifdef vfuses
+1:
 	lis %r3, 1
 	subi %r3, %r3, 0x60
 	blr
+.endif
+
+.ifdef jtag
+# ---------------------------------------------------
+# FixHoldAddr
+# ---------------------------------------------------
+2:
+	lis     %r4, 0x8000
+	rldicr  %r4, %r4, 32, 31
+	oris    %r4, %r4, 0x100
+	ori     %r4, %r4, 0x3080 	# 0x80000000_01003080 - had to patch freeboot.bin
+	ba      FixHoldAddrDone
 .endif
 
 # ---------------------------------------------------
@@ -280,6 +329,7 @@ MAKEPATCH HV_FlagFixer
 # 0xB53C w/o vfuses
 # TODO figure out how to calculate this automatically
 # ---------------------------------------------------
+3:
 	lis %r4, -0x8000
 	ori %r4, %r4, 0x200
 	sldi %r4, %r4, 0x20
@@ -295,10 +345,8 @@ charwait:
 
 # ---------------------------------------------------
 # HV_PP_Syscall0 (syscall 0 backdoor)
-# 0xB594 w/ vfuses
-# 0xB564 w/o vfuses
-# TODO figure out how to calculate this automatically
 # ---------------------------------------------------
+5:
 	lis %r11, 0x7262                  # Freeboot syscall key - 0x72627472 "rbtr" 1st half
 	ori %r11, %r11, 0x7472             # 2nd half
 
@@ -310,35 +358,16 @@ checkOpType:  # 0xB5A8
 	cmplwi cr6, %r4, 4                # Check for 4 aka hvxExecute
 	bgt cr6, doMemCpy                # If it's greter than 4 it must be MemCpy         
 	beq cr6, hvxExecuteCode          # If it matches then it's hvxExecute
-	li %r5, HV_setmemprot             # Memory protections function address added in an earlier patch
-	lis %r6, 0x3880                   # Sets r6 to 0x38800000 - Remains like this if protections are to be ENABLED
-	cmplwi cr6, %r4, 2                # Check for 2 aka set mem protections DISABLED     
-	bne cr6, checkForMemProtectOn    # If not, branch to check for mem protections ENABLED - 0xb59c
-	ori %r6, %r6, 7                    # Updates r6 to 0x38800007 - Indicating protections are to be DISABLED
-	b setMemProtections              # Branch to set memory protections setup             
-
-checkForMemProtectOn:   
-	cmplwi cr6, %r4, 3                # Check for 3 aka set mem protections ENABLED
-	bne cr6, returnOne               # If not, branch to returnOne to exit - 0xb5bc
-
-setMemProtections:
-	li %r0, 0
-	stw %r6, 0(%r5)                    # Sets the start of the set mem function based on what was set in r6 earlier - ENABLED = 0x38800000 (li r4, 0) || DISABLED = 0x38800007 (li r4, 7)
-	dcbst 0, %r5
-	icbi 0, %r5
-	sync 0
-	isync
-
-returnOne:
 	li %r3, 1
 	blr
 
 hvxExecuteCode:
-	mflr %r12
+	mflr %r12 # stow on the stack
 	std %r12, -8(%r1)
 	stdu %r1, -0x10(%r1)
 	mtlr %r5
 	mtctr %r7
+   # Copy dest = r5, src = r6, cnt = r7
 
 cpyLoop:
 	lwz %r4, 0(%r6)
@@ -377,6 +406,8 @@ MAKEPATCH Syscall_Table
 # ============================================================================
 #       HvxSecurity Functions  (sets machine acct flags)
 # ============================================================================
+
+# HvxSecuritySetDetected
 # 00 00 6B B0 00 00 00 02 38 60 00 00 4E 80 00 20
 MAKEPATCH 0x00006BB0
 0:
@@ -426,7 +457,7 @@ MAKEPATCH 0x0000813C
 9:
 
 # ============================================================================
-# 	Bypass CB sig check - Replaces call to XeCryptBnQwBeSigVerify
+#  disable CBA sig validation - Replaces call to XeCryptBnQwBeSigVerify
 # ============================================================================
 # 00 00 70 BC 00 00 00 01 38 60 00 01
 MAKEPATCH 0x000070BC
@@ -435,7 +466,7 @@ MAKEPATCH 0x000070BC
 9:
 
 # ============================================================================
-# 	Bypass CD check
+# disable CBB hash memcmp
 # ============================================================================
 # 00 00 72 68 00 00 00 01 38 60 00 00
 MAKEPATCH 0x00007268
@@ -444,7 +475,7 @@ MAKEPATCH 0x00007268
 9:
 
 # ============================================================================
-# 	NOP MachineCheck
+# 	NOP MachineCheck on bConsoleType
 # ============================================================================
 # 00 00 72 B4 00 00 00 01 60 00 00 00
 MAKEPATCH 0x000072B4
@@ -453,7 +484,7 @@ MAKEPATCH 0x000072B4
 9:
 
 # ============================================================================
-#	NOP MachineCheck
+#	NOP MachineCheck on bConsoleSequence    
 # ============================================================================
 # 00 00 72 C4 00 00 00 01 60 00 00 00
 MAKEPATCH 0x000072C4
@@ -462,7 +493,7 @@ MAKEPATCH 0x000072C4
 9:
 
 # ============================================================================
-#	NOP MachineCheck
+#	NOP MachineCheck on wConsoleSequenceAllow, force console to detect as retail
 # ============================================================================
 # 00 00 72 EC 00 00 00 02 60 00 00 00 39 60 00 01
 MAKEPATCH 0x000072EC
@@ -473,6 +504,8 @@ MAKEPATCH 0x000072EC
 
 # ============================================================================
 #	HvpCompareXGD2MediaID - Always return true
+#
+# Note from cOz release: locked memcmp Run GOD Content
 # ============================================================================
 # 00 02 4D 58 00 00 00 02 38 60 00 01 4E 80 00 20
 MAKEPATCH 0x00024D58
@@ -567,6 +600,8 @@ MAKEPATCH 0x0002CDD8
 
 # ============================================================================
 # 	HvxExpansionInstall - Disable conditional branch after XeCryptBnQwBeSigVerify
+#
+# Note from cOz release: if sig check fails pass it anyway, but don't use cpukey crypto
 # ============================================================================	
 # 00 03 08 9C 00 00 00 04 40 9A 00 08 3B A0 00 00 60 00 00 00 60 00 00 00
 MAKEPATCH 0x0003089C
@@ -597,6 +632,38 @@ MAKEPATCH 0x000304FC
 	nop
 9:
 
+# ============================================================================
+# HvFixKeys patch for zero fuse consoles
+# ============================================================================
+MAKEPATCH 0x00002DC8 # disable copying transform key from SoC
+0:
+	nop
+9:
+
+MAKEPATCH  0x00000018 # pbkey xex2key make transform key 81300D49C232F145
+0:
+	.long 0x81300D49
+	.long 0xC232F145
+9:
+
+# ============================================================================
+# CoronaKeysFix patch by InvoxiPlayGames
+#
+# This will fix audio playback issues / "the eternal loading bug"
+# in Rock Band and Dance Central games on modded Corona Xbox 360s.
+# ============================================================================
+MAKEPATCH 0x00003B8C
+0:
+	addi %r4, %r31, 0x10
+9:
+
+MAKEPATCH 0x0000611C
+0:
+	addi %r3, %r28, 0x10
+9:
+
+# Kernel patches from here on:
+
 #============================================================================
 # Patches XexpConvertError
 #============================================================================
@@ -618,6 +685,8 @@ KMAKEPATCH 0x8007C4B8
 
 #=============================================================================
 # Patches branch to RtlImageXexHeaderString within XexpLoadFile
+#
+# Note from cOz release: skip 0xC00000CC (BAD_NETWORK_NAME) error
 #=============================================================================
 # 00 07 C5 E8 00 00 00 01 38 60 00 00
 KMAKEPATCH 0x8007C5E8
@@ -627,6 +696,8 @@ KMAKEPATCH 0x8007C5E8
 
 #=============================================================================
 # Patch within XexpLoadFile
+#
+# Note from cOz release; skip 0xC000008B (resource not found) error
 #=============================================================================
 # 00 07 C6 34 00 00 00 01 39 60 00 00
 KMAKEPATCH 0x8007C634
@@ -636,6 +707,8 @@ KMAKEPATCH 0x8007C634
 
 #=============================================================================
 # Patch within XexpLoadFile
+#
+# Note from cOz release; skip 0xC000008B (resource not found) error
 #=============================================================================
 # 00 07 C6 84 00 00 00 01 39 60 00 00
 KMAKEPATCH 0x8007C684
@@ -655,6 +728,10 @@ KMAKEPATCH 0x8007AF08
 
 #=============================================================================
 # Patch within SfcxInspectLargeDataBlock
+#
+# Notes from cOz release:
+# - fix sfcxmu corruption issues on jasper bigblock - use 008 or higher for retail
+#   SfcxInspectLargeDataBlock 80091C28 lbz r23, 7(r30) # r23 = kernelresv blocks
 #=============================================================================
 # 00 09 4F 78 00 00 00 01 3A E0 00 10
 KMAKEPATCH 0x80094F78
@@ -664,11 +741,12 @@ KMAKEPATCH 0x80094F78
 
 #=============================================================================
 # Patch within SataCdRomAuthenticationExInitialize
+# disables AuthEx/AP25 on supp. drives 
 #=============================================================================
 # 00 09 98 D0 00 00 00 01 2B 0B 00 FF
 KMAKEPATCH 0x800998D0
 0:
-	cmplwi cr6, %r11, 0xff
+	cmplwi cr6, %r11, 0xff # originally checking XEIKA drive version !< 1
 9:
 
 
@@ -688,6 +766,8 @@ KMAKEPATCH 0x800992B4
 
 #=============================================================================
 # Patches XeKeysVerifyRSASignature
+#
+# Disable PIRS/LIVE Signature Check
 #=============================================================================
 # 00 10 9C 90 00 00 00 02 38 60 00 01 4E 80 00 20
 KMAKEPATCH 0x80109C90
@@ -748,6 +828,7 @@ KMAKEPATCH 0x8010B0E8
 
 #=============================================================================
 # Patches XeKeysRevokeIsDeviceRevoked
+# Note from cOz release:  usb device revocation (natal needs)
 #=============================================================================
 # 00 10 B2 78 00 00 00 02 38 60 00 00 4E 80 00 20 
 KMAKEPATCH 0x8010B278
@@ -790,7 +871,7 @@ KMAKEPATCH 0x80111990
 9:
 
 #=============================================================================
-# Patch within MassConfigureTransferCable (Skips hdd security sector verification???)
+# Patch within MassConfigureTransferCable (Skips hdd security sector verification)
 #=============================================================================
 # 00 0E 17 54 00 00 00 01 48 00 00 54
 KMAKEPATCH 0x800E1754
@@ -800,6 +881,9 @@ KMAKEPATCH 0x800E1754
 
 #=============================================================================
 # Patch within MassConfigureTransferCable
+#
+# Note from cOz release: Disable HDD size from SS
+# TODO: will this cause data corruption if somone attaches a retail drive???
 #=============================================================================
 # 00 0E 17 CC 00 00 00 03 83 5C 00 98 60 00 00 00 60 00 00 00
 KMAKEPATCH 0x800E17CC
@@ -812,11 +896,32 @@ KMAKEPATCH 0x800E17CC
 #=============================================================================
 # Patches SataDiskAuthenticateDevice (Disables hdd security sector verification)
 #============================================================================
+
+# This is the old FreeBoot patch that makes SataDiskAuthenticateDevice always return true
+# It can cause corruption on FATXPlorer formatted hard drives and some retail drives
 # 00 15 D9 D8 00 00 00 02 38 60 00 01 4E 80 00 20
-KMAKEPATCH 0x8015D9D8
+#KMAKEPATCH 0x8015D9D8
+#0:
+#	li %r3, 1
+#	blr
+#9:
+
+#============================================================================
+# Rather than calling VdDisplayFatalError to display an E69 (hehehehe),
+# jump to the error handler in SataDiskAuthenticateDevice
+#============================================================================
+KMAKEPATCH 0x8015DA18
 0:
-	li %r3, 1
-	blr
+   KMAKEBRANCH 0x8015DB08
+9:
+
+#============================================================================
+# Patch error handler to set r3 to 1 indicating "auth success" if we hit
+# any of the error paths in SataDiskAuthenticateDevice
+#============================================================================
+KMAKEPATCH 0x8015DB08
+0:
+   li %r3, 1
 9:
 
 #=============================================================================
@@ -949,34 +1054,22 @@ KMAKEPATCH 0x80108E70
 	b 0x3134    # 0x8010bfa4
 9:
 
-# ===================================
-# These bits are in the premade RGH3 glitch2m images
-# nointmu and nohdmiwait are enabled by default
-# ===================================
-.ifdef rgh3_patches
+#============================================================================
+# usbdsec patch by @InvoxiPlayGames that allows for 3rd party Xinput devices
+#============================================================================
 
-# nohdmiwait patch
-MAKEPATCH 0x0015BC80
+# patches UsbdIsDeviceAuthenticated to report all devices as authenticated
+KMAKEPATCH 0x800D8748
 0:
-	b 0x4c
+   li %r3, 1
+   blr
 9:
 
-# nointmu patch
-MAKEPATCH 0x0008E098
+# patches inside WgcAddDevice to allow for more leniency on the interface descriptor
+KMAKEPATCH 0x800F98E0
 0:
-	lis %r10, 0x6000
+   b 0x10
 9:
-
-MAKEPATCH 0x000E25A8
-0:
-	lis %r10, 0x6000
-9:
-
-MAKEPATCH 0x0008F3F8
-0:
-	blr
-9:
-.endif
 
 # done with patch section
 
